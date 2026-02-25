@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Company & Work Location Spider Tree</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --border: #1e2130;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .logo span { color: var(--text); }
+
+  .stats {
+    display: flex;
+    gap: 32px;
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* Main area */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .sidebar-title {
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .company-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+  }
+
+  .company-item:hover {
+    background: rgba(0,229,255,0.05);
+    border-color: rgba(0,229,255,0.2);
+  }
+
+  .company-item.active {
+    background: rgba(0,229,255,0.1);
+    border-color: var(--accent);
+  }
+
+  .company-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .company-name {
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--text);
+  }
+
+  .company-count {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--border);
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+
+  /* Canvas */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px 16px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+    min-width: 180px;
+    box-shadow: 0 0 24px rgba(0,229,255,0.15);
+  }
+
+  .tooltip.show { opacity: 1; }
+
+  .tooltip-company {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .tooltip-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .tooltip-type {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Legend bottom */
+  .legend {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 24px;
+    background: rgba(17,19,24,0.8);
+    border: 1px solid var(--border);
+    padding: 8px 20px;
+    border-radius: 30px;
+    backdrop-filter: blur(10px);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .legend-circle {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  /* Node labels */
+  .node-label {
+    font-family: 'DM Mono', monospace;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Grid bg lines */
+  .grid-line {
+    stroke: #1e2130;
+    stroke-width: 1;
+  }
+
+  /* Glow filter */
+  .glow {
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+
+  /* Search bar */
+  .search-wrap {
+    margin-bottom: 14px;
+  }
+
+  .search-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-input:focus {
+    border-color: var(--accent);
+  }
+
+  .search-input::placeholder { color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">Company<span>SPIDER</span></div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num">7</div>
+        <div class="stat-label">Companies</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">15</div>
+        <div class="stat-label">Locations</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">22</div>
+        <div class="stat-label">Total Nodes</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn active" onclick="resetZoom()">⟳ RESET</button>
+      <button class="btn" onclick="toggleLabels()">⊡ LABELS</button>
+      <button class="btn" onclick="expandAll()">⊞ EXPAND</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-title">Filter by Company</div>
+      <div class="search-wrap">
+        <input class="search-input" type="text" placeholder="Search..." oninput="filterCompanies(this.value)" />
+      </div>
+      <div id="company-list"></div>
+    </div>
+
+    <!-- CANVAS -->
+    <div class="canvas-wrap" id="canvas-wrap">
+      <svg id="svg"></svg>
+      <div class="tooltip" id="tooltip">
+        <div class="tooltip-company" id="tt-company"></div>
+        <div class="tooltip-name" id="tt-name"></div>
+        <div class="tooltip-type" id="tt-type"></div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-circle" style="background:#00e5ff"></div> Hub (Root)</div>
+        <div class="legend-item"><div class="legend-circle" style="background:#7c3aed"></div> Company</div>
+        <div class="legend-item"><div class="legend-circle" style="background:#f59e0b"></div> Work Location</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+const COMPANIES = [
+  { id: "yaqeen", name: "AL YAQEEN ADVANCED TRADING CO", short: "AL YAQEEN", color: "#7c3aed" },
+  { id: "ds",     name: "DIAMOND STAR ARABIA INDUSTRIA", short: "DIAMOND STAR (DS)", color: "#ec4899" },
+  { id: "dswaste",name: "Diamond Star for Waste Recycling", short: "DS WASTE", color: "#06b6d4" },
+  { id: "green",  name: "GREEN CITY INTERNATIONAL", short: "GREEN CITY", color: "#22c55e" },
+  { id: "namma",  name: "NAMMA AL ENJAZ FACTORY FOR IND", short: "NAMMA", color: "#f97316" },
+  { id: "owner",  name: "OWNER'S A/C", short: "OWNER'S A/C", color: "#a855f7" },
+  { id: "salon",  name: "SALON AJWAD ALMASIA FOR MENS", short: "SALON AJWAD", color: "#14b8a6" },
+];
+
+const LOCATIONS = [
+  { id: "l1",  name: "AINDAR PLANT",        company: "yaqeen", full: "AINDAR PLANT - AL YAQEEN" },
+  { id: "l2",  name: "AL QUAZAIN YARD",     company: "yaqeen", full: "AL QUAZAIN YARD - AL YAQEEN" },
+  { id: "l3",  name: "CABLING PROJECT",     company: "yaqeen", full: "CABLING PROJECT - AL YAQEEN" },
+  { id: "l4",  name: "SCRAP CITY",          company: "yaqeen", full: "SCRAP CITY - AL YAQEEN" },
+  { id: "l5",  name: "DSA BUILDING",        company: "ds",     full: "DSA BUILDING" },
+  { id: "l6",  name: "DSA PAPER",           company: "dswaste",full: "DSA paper" },
+  { id: "l7",  name: "HEAD OFFICE - DS",    company: "ds",     full: "Head office_DS" },
+  { id: "l8",  name: "METAL FACTORY",       company: "ds",     full: "METAL FACTORY - DS" },
+  { id: "l9",  name: "PLASTIC FACTORY DS",  company: "ds",     full: "PLASTIC FACTORY - DS" },
+  { id: "l10", name: "HEAD OFFICE",         company: "namma",  full: "HEAD OFFICE - NAMMA" },
+  { id: "l11", name: "PLASTIC FACTORY NM",  company: "namma",  full: "PLASTIC FACTORY - NAMMA" },
+  { id: "l12", name: "WASTE PAPER",         company: "green",  full: "WASTE PAPER - GREENCITY" },
+  { id: "l13", name: "TEM",                 company: "green",  full: "TEM" },
+  { id: "l14", name: "OWNER'S OFFICE",      company: "owner",  full: "OWNER'S A/C" },
+  { id: "l15", name: "SALOON",              company: "salon",  full: "SALOON" },
+];
+
+// ─── D3 SETUP ─────────────────────────────────────────────────────────────────
+const wrap = document.getElementById('canvas-wrap');
+const svgEl = document.getElementById('svg');
+
+let showLabels = true;
+let activeCompany = null;
+
+function getSize() {
+  return { w: wrap.clientWidth, h: wrap.clientHeight };
+}
+
+const svg = d3.select('#svg');
+const gMain = svg.append('g').attr('id', 'main');
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.3, 3])
+  .on('zoom', (e) => gMain.attr('transform', e.transform));
+svg.call(zoom);
+
+// Defs - glow filters
+const defs = svg.append('defs');
+COMPANIES.forEach(c => {
+  const f = defs.append('filter').attr('id', `glow-${c.id}`);
+  f.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredBlur');
+  const fM = f.append('feMerge');
+  fM.append('feMergeNode').attr('in', 'coloredBlur');
+  fM.append('feMergeNode').attr('in', 'SourceGraphic');
+});
+
+// Root glow
+const fRoot = defs.append('filter').attr('id', 'glow-root');
+fRoot.append('feGaussianBlur').attr('stdDeviation', '6').attr('result', 'coloredBlur');
+const fRootM = fRoot.append('feMerge');
+fRootM.append('feMergeNode').attr('in', 'coloredBlur');
+fRootM.append('feMergeNode').attr('in', 'SourceGraphic');
+
+// Build the tree
+function buildTree() {
+  const { w, h } = getSize();
+  gMain.selectAll('*').remove();
+
+  const cx = w / 2;
+  const cy = h / 2;
+  const rootR = 32;
+  const companyR = 22;
+  const locR = 14;
+
+  const companyOrbit = Math.min(w, h) * 0.28;
+  const locOrbit = Math.min(w, h) * 0.16;
+
+  const visibleCompanies = activeCompany
+    ? COMPANIES.filter(c => c.id === activeCompany)
+    : COMPANIES;
+
+  const angleStep = (2 * Math.PI) / visibleCompanies.length;
+
+  // Links group
+  const gLinks = gMain.append('g').attr('id', 'links');
+  const gNodes = gMain.append('g').attr('id', 'nodes');
+  const gLabels = gMain.append('g').attr('id', 'labels');
+
+  // Root node
+  gNodes.append('circle')
+    .attr('cx', cx).attr('cy', cy)
+    .attr('r', rootR)
+    .attr('fill', '#0a0c10')
+    .attr('stroke', '#00e5ff')
+    .attr('stroke-width', 2.5)
+    .attr('filter', 'url(#glow-root)');
+
+  gNodes.append('text')
+    .attr('x', cx).attr('y', cy + 1)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', '#00e5ff')
+    .attr('font-family', 'Syne, sans-serif')
+    .attr('font-size', '9px')
+    .attr('font-weight', '800')
+    .attr('letter-spacing', '1')
+    .text('HR HUB');
+
+  // Companies
+  visibleCompanies.forEach((company, ci) => {
+    const angle = ci * angleStep - Math.PI / 2;
+    const startAngle = ci * (2 * Math.PI) / (activeCompany ? 1 : COMPANIES.length);
+
+    const cx2 = cx + companyOrbit * Math.cos(angle);
+    const cy2 = cy + companyOrbit * Math.sin(angle);
+
+    const compLocs = LOCATIONS.filter(l => l.company === company.id);
+    const locAngleStep = compLocs.length > 0
+      ? (Math.PI * 0.8) / Math.max(compLocs.length - 1, 1)
+      : 0;
+    const locStartAngle = angle - (compLocs.length - 1) * locAngleStep / 2;
+
+    // Line: root → company
+    gLinks.append('line')
+      .attr('x1', cx).attr('y1', cy)
+      .attr('x2', cx2).attr('y2', cy2)
+      .attr('stroke', company.color)
+      .attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.4)
+      .attr('stroke-dasharray', '4 3');
+
+    // Location lines and nodes
+    compLocs.forEach((loc, li) => {
+      const lAngle = compLocs.length === 1
+        ? angle
+        : locStartAngle + li * locAngleStep;
+
+      const lx = cx2 + locOrbit * Math.cos(lAngle);
+      const ly = cy2 + locOrbit * Math.sin(lAngle);
+
+      // company → location link
+      gLinks.append('line')
+        .attr('x1', cx2).attr('y1', cy2)
+        .attr('x2', lx).attr('y2', ly)
+        .attr('stroke', '#f59e0b')
+        .attr('stroke-width', 1)
+        .attr('stroke-opacity', 0.3);
+
+      // Location circle
+      const locNode = gNodes.append('circle')
+        .attr('cx', lx).attr('cy', ly)
+        .attr('r', locR)
+        .attr('fill', '#0f1117')
+        .attr('stroke', '#f59e0b')
+        .attr('stroke-width', 1.5)
+        .attr('cursor', 'pointer')
+        .attr('data-id', loc.id);
+
+      locNode
+        .on('mouseenter', function(event) {
+          d3.select(this).attr('r', locR + 3).attr('stroke-width', 2.5);
+          showTooltip(event, company.name, loc.full, 'WORK LOCATION', '#f59e0b');
+        })
+        .on('mousemove', moveTooltip)
+        .on('mouseleave', function() {
+          d3.select(this).attr('r', locR).attr('stroke-width', 1.5);
+          hideTooltip();
+        });
+
+      // Dot inside location
+      gNodes.append('circle')
+        .attr('cx', lx).attr('cy', ly)
+        .attr('r', 3)
+        .attr('fill', '#f59e0b')
+        .attr('pointer-events', 'none');
+
+      // Location label — ALWAYS visible outside the node
+      {
+        const isRight = Math.cos(lAngle) >= 0;
+        const lxLabel = lx + (locR + 8) * Math.cos(lAngle);
+        const lyLabel = ly + (locR + 8) * Math.sin(lAngle);
+        const words = loc.name.split(' ');
+        let lines = [];
+        let current = '';
+        words.forEach(w => {
+          if ((current + ' ' + w).trim().length > 14 && current.length > 0) {
+            lines.push(current);
+            current = w;
+          } else {
+            current = (current + ' ' + w).trim();
+          }
+        });
+        if (current) lines.push(current);
+        const lineH = 11;
+        const totalH = lines.length * lineH;
+        const startY = lyLabel - (totalH / 2) + lineH / 2;
+        const maxLen = Math.max(...lines.map(l => l.length));
+        const pillW = maxLen * 6.2 + 12;
+        const pillH = totalH + 6;
+        const pillX = isRight ? lxLabel - 4 : lxLabel - pillW + 4;
+        gLabels.append('rect')
+          .attr('x', pillX).attr('y', startY - lineH / 2 - 3)
+          .attr('width', pillW).attr('height', pillH)
+          .attr('rx', 4).attr('fill', 'rgba(10,12,16,0.82)')
+          .attr('pointer-events', 'none');
+        lines.forEach((line, li) => {
+          gLabels.append('text')
+            .attr('x', lxLabel).attr('y', startY + li * lineH)
+            .attr('text-anchor', isRight ? 'start' : 'end')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', '#e2e8f0')
+            .attr('font-family', 'DM Mono, monospace')
+            .attr('font-size', '9.5px').attr('font-weight', '500')
+            .attr('pointer-events', 'none')
+            .text(line);
+        });
+      }
+    });
+
+    // Company circle
+    const compNode = gNodes.append('circle')
+      .attr('cx', cx2).attr('cy', cy2)
+      .attr('r', companyR)
+      .attr('fill', '#0a0c10')
+      .attr('stroke', company.color)
+      .attr('stroke-width', 2)
+      .attr('filter', `url(#glow-${company.id})`)
+      .attr('cursor', 'pointer');
+
+    compNode
+      .on('click', function() {
+        if (activeCompany === company.id) {
+          activeCompany = null;
+        } else {
+          activeCompany = company.id;
+        }
+        buildTree();
+        updateSidebar();
+      })
+      .on('mouseenter', function(event) {
+        d3.select(this).attr('r', companyR + 4).attr('stroke-width', 3);
+        const cnt = LOCATIONS.filter(l => l.company === company.id).length;
+        showTooltip(event, 'COMPANY', company.name, `${cnt} LOCATIONS`, company.color);
+      })
+      .on('mousemove', moveTooltip)
+      .on('mouseleave', function() {
+        d3.select(this).attr('r', companyR).attr('stroke-width', 2);
+        hideTooltip();
+      });
+
+    // Company label inside
+    gNodes.append('text')
+      .attr('x', cx2).attr('y', cy2)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', company.color)
+      .attr('font-family', 'Syne, sans-serif')
+      .attr('font-size', '7px')
+      .attr('font-weight', '700')
+      .attr('pointer-events', 'none')
+      .text(company.short.split(' ').slice(0,2).join(' '));
+
+    // Company outside label
+    if (showLabels) {
+      const labelDist = companyOrbit + companyR + 14;
+      const lx3 = cx + labelDist * Math.cos(angle);
+      const ly3 = cy + labelDist * Math.sin(angle);
+      const isRight = Math.cos(angle) >= 0;
+
+      gLabels.append('text')
+        .attr('x', lx3).attr('y', ly3)
+        .attr('text-anchor', isRight ? 'start' : 'end')
+        .attr('dominant-baseline', 'middle')
+        .attr('fill', company.color)
+        .attr('font-family', 'Syne, sans-serif')
+        .attr('font-size', '11px')
+        .attr('font-weight', '600')
+        .attr('pointer-events', 'none')
+        .text(company.short);
+    }
+  });
+
+  // Animate nodes
+  gNodes.selectAll('circle')
+    .attr('opacity', 0)
+    .transition().duration(600).delay((d, i) => i * 30)
+    .attr('opacity', 1);
+}
+
+// ─── TOOLTIP ──────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+const ttCompany = document.getElementById('tt-company');
+const ttName = document.getElementById('tt-name');
+const ttType = document.getElementById('tt-type');
+
+function showTooltip(event, company, name, type, color) {
+  ttCompany.textContent = company;
+  ttName.textContent = name;
+  ttType.textContent = type;
+  ttType.style.color = color;
+  tooltip.style.borderColor = color;
+  tooltip.classList.add('show');
+  moveTooltip(event);
+}
+
+function moveTooltip(event) {
+  const rect = wrap.getBoundingClientRect();
+  const x = event.clientX - rect.left + 14;
+  const y = event.clientY - rect.top - 10;
+  tooltip.style.left = Math.min(x, wrap.clientWidth - 200) + 'px';
+  tooltip.style.top = Math.max(0, y) + 'px';
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('show');
+}
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+function updateSidebar() {
+  const list = document.getElementById('company-list');
+  list.innerHTML = '';
+
+  COMPANIES.forEach(c => {
+    const cnt = LOCATIONS.filter(l => l.company === c.id).length;
+    const div = document.createElement('div');
+    div.className = 'company-item' + (activeCompany === c.id ? ' active' : '');
+    div.innerHTML = `
+      <div class="company-dot" style="background:${c.color}"></div>
+      <div class="company-name">${c.short}</div>
+      <div class="company-count">${cnt}</div>
+    `;
+    div.onclick = () => {
+      activeCompany = activeCompany === c.id ? null : c.id;
+      buildTree();
+      updateSidebar();
+    };
+    list.appendChild(div);
+  });
+}
+
+// ─── CONTROLS ─────────────────────────────────────────────────────────────────
+function resetZoom() {
+  svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+  activeCompany = null;
+  buildTree();
+  updateSidebar();
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  buildTree();
+}
+
+function expandAll() {
+  activeCompany = null;
+  buildTree();
+  updateSidebar();
+}
+
+function filterCompanies(val) {
+  document.querySelectorAll('.company-item').forEach((el, i) => {
+    const show = COMPANIES[i].name.toLowerCase().includes(val.toLowerCase()) ||
+                 COMPANIES[i].short.toLowerCase().includes(val.toLowerCase());
+    el.style.display = show ? '' : 'none';
+  });
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+updateSidebar();
+buildTree();
+
+window.addEventListener('resize', () => buildTree());
+</script>
+</body>
+</html>
